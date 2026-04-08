@@ -1,6 +1,4 @@
 {
-  "name": "claude-notification",
-  "description": "Windows toast notifications when Claude Code needs your attention",
   "hooks": {
     "Notification": [
       {

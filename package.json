@@ -1,0 +1,5 @@
+{
+  "name": "claude-notification",
+  "version": "1.0.0",
+  "description": "Windows toast notifications when Claude Code needs your attention"
+}
