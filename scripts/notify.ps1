@@ -1,6 +1,9 @@
 # notify.ps1 — Sends a Windows toast notification when Claude Code needs attention.
 # Called by Claude Code's Notification hook.
 
+$logFile = Join-Path $env:TEMP "claude-notification-debug.log"
+"[$(Get-Date -Format 'yyyy-MM-dd HH:mm:ss')] notify.ps1 started" | Out-File -Append $logFile
+
 # Read hook JSON from stdin (well-behaved hook contract)
 $hookInput = $null
 try {
@@ -65,18 +68,20 @@ if ($terminal) {
     $terminal.Id | Out-File -FilePath (Join-Path $env:TEMP "claude-notification-pid.txt") -NoNewline -Encoding ascii
 }
 
-# Send toast notification with protocol activation
-$toastParams = @{
-    Text = "Claude Code", "Claude Code needs your attention"
-    AppLogo = $null
-    ActivationType = "Protocol"
-    ActivationArgument = "claude-focus://focus"
-}
-
+# Send toast notification with protocol activation on click
 try {
-    New-BurntToastNotification @toastParams
+    "[$( Get-Date -Format 'yyyy-MM-dd HH:mm:ss')] Sending toast..." | Out-File -Append $logFile
+
+    $text1 = New-BTText -Content "Claude Code"
+    $text2 = New-BTText -Content "Claude Code needs your attention"
+    $binding = New-BTBinding -Children $text1, $text2
+    $visual = New-BTVisual -BindingGeneric $binding
+    $content = New-BTContent -Visual $visual -Launch "claude-focus://focus" -ActivationType Protocol
+    Submit-BTNotification -Content $content
+
+    "[$( Get-Date -Format 'yyyy-MM-dd HH:mm:ss')] Toast sent successfully" | Out-File -Append $logFile
 } catch {
-    # Silently fail — don't block the hook
+    "[$( Get-Date -Format 'yyyy-MM-dd HH:mm:ss')] Toast failed: $_" | Out-File -Append $logFile
 }
 
 exit 0
