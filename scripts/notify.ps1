@@ -26,44 +26,51 @@ if (-not (Get-Command New-BurntToastNotification -ErrorAction SilentlyContinue))
     exit 0
 }
 
-# Get the console window handle for this specific tab.
-# In Windows Terminal, each tab has its own console — GetConsoleWindow() returns that tab's handle.
-Add-Type -Name ConsoleAPI -Namespace Win32 -MemberDefinition @"
-[DllImport("kernel32.dll")]
-public static extern IntPtr GetConsoleWindow();
-"@
-
-$consoleHwnd = [Win32.ConsoleAPI]::GetConsoleWindow()
-"[$( Get-Date -Format 'yyyy-MM-dd HH:mm:ss')] Console HWND: $consoleHwnd" | Out-File -Append $logFile
-
-# Save console window handle for focus.ps1
-$hwndFile = Join-Path $env:TEMP "claude-notification-hwnd.txt"
-$consoleHwnd.ToInt64().ToString() | Out-File -FilePath $hwndFile -NoNewline -Encoding ascii
-
-# Also save parent terminal PID as fallback
-function Find-TerminalProcess {
+# Find a process in the terminal tab's console session.
+# Walk up the process tree to find a shell or node process that lives in the tab.
+# focus.ps1 will use AttachConsole(pid) to find and focus the correct tab.
+function Find-TabProcessPid {
     $current = Get-Process -Id $PID -ErrorAction SilentlyContinue
     $visited = @{}
+    $tabPid = $null
+    $terminalPid = $null
+
     while ($current) {
         if ($visited.ContainsKey($current.Id)) { break }
         $visited[$current.Id] = $true
-        if ($current.MainWindowHandle -ne [IntPtr]::Zero) { return $current }
+
+        $name = $current.ProcessName.ToLower()
+        "[$( Get-Date -Format 'yyyy-MM-dd HH:mm:ss')]   Walking: $($current.Id) $($current.ProcessName)" | Out-File -Append $logFile
+
+        # Save the first shell/node process as the tab process
+        if (-not $tabPid -and $name -in @("bash", "pwsh", "powershell", "cmd", "node")) {
+            $tabPid = $current.Id
+        }
+
+        # Save the terminal window process
+        if ($current.MainWindowHandle -ne [IntPtr]::Zero -and $name -in @("windowsterminal", "conemu64", "conemu")) {
+            $terminalPid = $current.Id
+        }
+
         try {
             $parentId = (Get-CimInstance Win32_Process -Filter "ProcessId = $($current.Id)" -ErrorAction SilentlyContinue).ParentProcessId
             if (-not $parentId -or $parentId -eq $current.Id) { break }
             $current = Get-Process -Id $parentId -ErrorAction SilentlyContinue
         } catch { break }
     }
-    $terminalNames = @("WindowsTerminal", "cmd", "powershell", "pwsh")
-    foreach ($name in $terminalNames) {
-        $proc = Get-Process -Name $name -ErrorAction SilentlyContinue | Where-Object { $_.MainWindowHandle -ne [IntPtr]::Zero } | Select-Object -First 1
-        if ($proc) { return $proc }
-    }
-    return $null
+
+    return @{ TabPid = $tabPid; TerminalPid = $terminalPid }
 }
-$terminal = Find-TerminalProcess
-if ($terminal) {
-    $terminal.Id | Out-File -FilePath (Join-Path $env:TEMP "claude-notification-pid.txt") -NoNewline -Encoding ascii
+
+$pids = Find-TabProcessPid
+"[$( Get-Date -Format 'yyyy-MM-dd HH:mm:ss')] Tab PID: $($pids.TabPid), Terminal PID: $($pids.TerminalPid)" | Out-File -Append $logFile
+
+# Save both PIDs for focus.ps1
+if ($pids.TabPid) {
+    $pids.TabPid | Out-File -FilePath (Join-Path $env:TEMP "claude-notification-tabpid.txt") -NoNewline -Encoding ascii
+}
+if ($pids.TerminalPid) {
+    $pids.TerminalPid | Out-File -FilePath (Join-Path $env:TEMP "claude-notification-pid.txt") -NoNewline -Encoding ascii
 }
 
 # Send toast notification with protocol activation on click

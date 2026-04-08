@@ -1,4 +1,4 @@
-# focus.ps1 — Brings the Claude Code terminal window/tab to the foreground.
+# focus.ps1 — Brings the Claude Code terminal tab to the foreground.
 # Called by Windows via the claude-focus:// protocol when a toast is clicked.
 
 Add-Type @"
@@ -15,6 +15,15 @@ public class Win32Focus {
     [DllImport("user32.dll")]
     public static extern bool IsWindow(IntPtr hWnd);
 
+    [DllImport("kernel32.dll")]
+    public static extern bool FreeConsole();
+
+    [DllImport("kernel32.dll")]
+    public static extern bool AttachConsole(uint dwProcessId);
+
+    [DllImport("kernel32.dll")]
+    public static extern IntPtr GetConsoleWindow();
+
     public const int SW_RESTORE = 9;
     public const int SW_SHOW = 5;
 }
@@ -22,22 +31,27 @@ public class Win32Focus {
 
 $focused = $false
 
-# Strategy 1: Use the saved console window handle (per-tab in Windows Terminal)
-$hwndFile = Join-Path $env:TEMP "claude-notification-hwnd.txt"
-if (Test-Path $hwndFile) {
-    $hwndValue = Get-Content $hwndFile -ErrorAction SilentlyContinue
-    if ($hwndValue) {
+# Strategy 1: AttachConsole to a process in the tab, then focus its console window.
+# This tells Windows Terminal to switch to the correct tab.
+$tabPidFile = Join-Path $env:TEMP "claude-notification-tabpid.txt"
+if (Test-Path $tabPidFile) {
+    $tabPid = Get-Content $tabPidFile -ErrorAction SilentlyContinue
+    if ($tabPid) {
         try {
-            $hwnd = [IntPtr]::new([long]$hwndValue)
-            if ([Win32Focus]::IsWindow($hwnd)) {
-                [Win32Focus]::ShowWindow($hwnd, [Win32Focus]::SW_SHOW)
-                $focused = [Win32Focus]::SetForegroundWindow($hwnd)
+            [Win32Focus]::FreeConsole() | Out-Null
+            if ([Win32Focus]::AttachConsole([uint32]$tabPid)) {
+                $hwnd = [Win32Focus]::GetConsoleWindow()
+                if ($hwnd -ne [IntPtr]::Zero -and [Win32Focus]::IsWindow($hwnd)) {
+                    [Win32Focus]::ShowWindow($hwnd, [Win32Focus]::SW_SHOW)
+                    $focused = [Win32Focus]::SetForegroundWindow($hwnd)
+                }
+                [Win32Focus]::FreeConsole() | Out-Null
             }
         } catch {}
     }
 }
 
-# Strategy 2: Fallback to parent terminal PID
+# Strategy 2: Fallback to parent terminal PID (brings WT window forward, may not switch tab)
 if (-not $focused) {
     $pidFile = Join-Path $env:TEMP "claude-notification-pid.txt"
     if (Test-Path $pidFile) {
