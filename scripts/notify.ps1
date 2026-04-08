@@ -26,44 +26,42 @@ if (-not (Get-Command New-BurntToastNotification -ErrorAction SilentlyContinue))
     exit 0
 }
 
-# Find the parent terminal process.
-# Walk up the process tree from this script's process to find the terminal window.
+# Get the console window handle for this specific tab.
+# In Windows Terminal, each tab has its own console — GetConsoleWindow() returns that tab's handle.
+Add-Type -Name ConsoleAPI -Namespace Win32 -MemberDefinition @"
+[DllImport("kernel32.dll")]
+public static extern IntPtr GetConsoleWindow();
+"@
+
+$consoleHwnd = [Win32.ConsoleAPI]::GetConsoleWindow()
+"[$( Get-Date -Format 'yyyy-MM-dd HH:mm:ss')] Console HWND: $consoleHwnd" | Out-File -Append $logFile
+
+# Save console window handle for focus.ps1
+$hwndFile = Join-Path $env:TEMP "claude-notification-hwnd.txt"
+$consoleHwnd.ToInt64().ToString() | Out-File -FilePath $hwndFile -NoNewline -Encoding ascii
+
+# Also save parent terminal PID as fallback
 function Find-TerminalProcess {
     $current = Get-Process -Id $PID -ErrorAction SilentlyContinue
     $visited = @{}
-
     while ($current) {
         if ($visited.ContainsKey($current.Id)) { break }
         $visited[$current.Id] = $true
-
-        # Check if this process has a visible window
-        if ($current.MainWindowHandle -ne [IntPtr]::Zero) {
-            return $current
-        }
-
-        # Walk up to parent
+        if ($current.MainWindowHandle -ne [IntPtr]::Zero) { return $current }
         try {
             $parentId = (Get-CimInstance Win32_Process -Filter "ProcessId = $($current.Id)" -ErrorAction SilentlyContinue).ParentProcessId
             if (-not $parentId -or $parentId -eq $current.Id) { break }
             $current = Get-Process -Id $parentId -ErrorAction SilentlyContinue
-        } catch {
-            break
-        }
+        } catch { break }
     }
-
-    # Fallback: look for Windows Terminal or common terminal hosts
-    $terminalNames = @("WindowsTerminal", "cmd", "powershell", "pwsh", "ConEmu64", "ConEmuC64")
+    $terminalNames = @("WindowsTerminal", "cmd", "powershell", "pwsh")
     foreach ($name in $terminalNames) {
         $proc = Get-Process -Name $name -ErrorAction SilentlyContinue | Where-Object { $_.MainWindowHandle -ne [IntPtr]::Zero } | Select-Object -First 1
         if ($proc) { return $proc }
     }
-
     return $null
 }
-
 $terminal = Find-TerminalProcess
-
-# Save terminal PID for focus.ps1
 if ($terminal) {
     $terminal.Id | Out-File -FilePath (Join-Path $env:TEMP "claude-notification-pid.txt") -NoNewline -Encoding ascii
 }
