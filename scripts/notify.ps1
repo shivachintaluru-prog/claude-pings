@@ -26,37 +26,39 @@ if (-not (Get-Command New-BurntToastNotification -ErrorAction SilentlyContinue))
     exit 0
 }
 
-# Find a process in the terminal tab's console session.
-# Walk up the process tree to find a shell or node process that lives in the tab.
-# focus.ps1 will use AttachConsole(pid) to find and focus the correct tab.
+# Find the tab's root process by walking up to WindowsTerminal,
+# then picking the process just below it (the tab's shell).
 function Find-TabProcessPid {
     $current = Get-Process -Id $PID -ErrorAction SilentlyContinue
     $visited = @{}
-    $tabPid = $null
-    $terminalPid = $null
+    $chain = @()
 
+    # Build the full ancestor chain
     while ($current) {
         if ($visited.ContainsKey($current.Id)) { break }
         $visited[$current.Id] = $true
-
-        $name = $current.ProcessName.ToLower()
+        $chain += $current
         "[$( Get-Date -Format 'yyyy-MM-dd HH:mm:ss')]   Walking: $($current.Id) $($current.ProcessName)" | Out-File -Append $logFile
-
-        # Save the first shell/node process as the tab process
-        if (-not $tabPid -and $name -in @("bash", "pwsh", "powershell", "cmd", "node")) {
-            $tabPid = $current.Id
-        }
-
-        # Save the terminal window process
-        if ($current.MainWindowHandle -ne [IntPtr]::Zero -and $name -in @("windowsterminal", "conemu64", "conemu")) {
-            $terminalPid = $current.Id
-        }
-
         try {
             $parentId = (Get-CimInstance Win32_Process -Filter "ProcessId = $($current.Id)" -ErrorAction SilentlyContinue).ParentProcessId
             if (-not $parentId -or $parentId -eq $current.Id) { break }
             $current = Get-Process -Id $parentId -ErrorAction SilentlyContinue
         } catch { break }
+    }
+
+    # Find WindowsTerminal in the chain, then pick the process just before it (the tab's root)
+    $terminalPid = $null
+    $tabPid = $null
+    for ($i = 0; $i -lt $chain.Count; $i++) {
+        $name = $chain[$i].ProcessName.ToLower()
+        if ($name -in @("windowsterminal", "conemu64", "conemu")) {
+            $terminalPid = $chain[$i].Id
+            # The process just before WindowsTerminal in the chain is the tab's root
+            if ($i -gt 0) {
+                $tabPid = $chain[$i - 1].Id
+            }
+            break
+        }
     }
 
     return @{ TabPid = $tabPid; TerminalPid = $terminalPid }
