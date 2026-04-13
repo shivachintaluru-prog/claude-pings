@@ -18,6 +18,9 @@ try {
     }
 } catch {}
 
+# Log hook invocations (kept for diagnosing duplicate notifications)
+"[$(Get-Date -Format 'yyyy-MM-dd HH:mm:ss.fff')] EVENT=$eventName" | Out-File -Append (Join-Path $env:TEMP "claude-notification-debug.log")
+
 # Debounce Stop events — suppress if one was sent less than 5 seconds ago.
 # This filters out intermediate tool-use stops while catching the final "done" stop.
 if ($eventName -eq "stop") {
