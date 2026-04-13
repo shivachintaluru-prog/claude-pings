@@ -18,6 +18,19 @@ try {
     }
 } catch {}
 
+# Debounce Stop events — suppress if one was sent less than 5 seconds ago.
+# This filters out intermediate tool-use stops while catching the final "done" stop.
+if ($eventName -eq "stop") {
+    $lockFile = Join-Path $env:TEMP "claude-notification-stop.lock"
+    if (Test-Path $lockFile) {
+        try {
+            $lastStop = [DateTime]::Parse((Get-Content $lockFile -ErrorAction SilentlyContinue))
+            if (((Get-Date) - $lastStop).TotalSeconds -lt 5) { exit 0 }
+        } catch {}
+    }
+    (Get-Date).ToString("o") | Out-File $lockFile -NoNewline -Encoding ascii
+}
+
 # Check BurntToast is available
 if (-not (Get-Module -ListAvailable -Name BurntToast)) { exit 0 }
 Import-Module BurntToast -ErrorAction SilentlyContinue
