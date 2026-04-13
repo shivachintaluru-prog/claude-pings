@@ -1,0 +1,36 @@
+{
+  "stop": [
+    "All done \u2014 come see what I built",
+    "Your results are hot off the press",
+    "Finished! Ready when you are",
+    "I've wrapped up \u2014 take a look",
+    "Output's ready, chef",
+    "Mission accomplished. Your move",
+    "Done cooking \u2014 come grab your plate",
+    "The deed is done",
+    "Results are in. Verdict's up to you",
+    "I've done my part \u2014 over to you",
+    "Fresh output, served warm",
+    "Another one in the books",
+    "I've landed \u2014 come check the runway",
+    "Task complete. Ball's in your court",
+    "Ready for your review, captain"
+  ],
+  "notification": [
+    "Quick \u2014 I need a thumbs up to keep going",
+    "Permission check! Can I proceed?",
+    "Waiting on your green light",
+    "I've got a plan, just need your OK",
+    "Pit stop \u2014 need your call on this one",
+    "A wild permission prompt appeared!",
+    "Your approval is required to continue",
+    "I've paused for your input",
+    "Need a quick decision from you",
+    "Holding for your go-ahead",
+    "Can I get an aye on this?",
+    "I promise it's a quick one",
+    "Just need a sec of your time",
+    "Checkpoint reached \u2014 awaiting orders",
+    "Small ask before I continue"
+  ]
+}

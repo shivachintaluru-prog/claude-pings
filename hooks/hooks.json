@@ -10,6 +10,30 @@
           }
         ]
       }
+    ],
+    "Stop": [
+      {
+        "matcher": "",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "powershell.exe -ExecutionPolicy Bypass -File \"${CLAUDE_PLUGIN_ROOT}/scripts/notify.ps1\""
+          }
+        ]
+      }
+    ],
+    "SessionStart": [
+      {
+        "matcher": "",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "powershell.exe -ExecutionPolicy Bypass -File \"${CLAUDE_PLUGIN_ROOT}/scripts/update-tips.ps1\"",
+            "async": true,
+            "timeout": 60
+          }
+        ]
+      }
     ]
   }
 }
