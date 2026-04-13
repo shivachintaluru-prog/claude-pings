@@ -40,7 +40,7 @@ $message = "Claude Code needs your attention"
 $messagesFile = Join-Path $dataDir "messages.json"
 if (Test-Path $messagesFile) {
     try {
-        $messages = Get-Content $messagesFile -Raw | ConvertFrom-Json
+        $messages = Get-Content $messagesFile -Raw -Encoding UTF8 | ConvertFrom-Json
         $key = if ($eventName -eq "stop") { "stop" } else { "notification" }
         $pool = $messages.$key
         if ($pool -and $pool.Count -gt 0) {
