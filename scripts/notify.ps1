@@ -22,17 +22,16 @@ try {
 # Log hook invocations (kept for diagnosing duplicate notifications)
 "[$(Get-Date -Format 'yyyy-MM-dd HH:mm:ss.fff')] EVENT=$eventName" | Out-File -Append (Join-Path $env:TEMP "claude-notification-debug.log")
 
-# Debounce Stop events — suppress if one was sent less than 5 seconds ago.
-if ($eventName -eq "stop") {
-    $lockFile = Join-Path $env:TEMP "claude-notification-stop.lock"
-    if (Test-Path $lockFile) {
-        try {
-            $lastStop = [DateTime]::Parse((Get-Content $lockFile -ErrorAction SilentlyContinue))
-            if (((Get-Date) - $lastStop).TotalSeconds -lt 5) { exit 0 }
-        } catch {}
-    }
-    (Get-Date).ToString("o") | Out-File $lockFile -NoNewline -Encoding ascii
+# Debounce ALL events — suppress if any notification was sent less than 15 seconds ago.
+# Prevents duplicates when both Stop and Notification fire for the same response.
+$lockFile = Join-Path $env:TEMP "claude-notification.lock"
+if (Test-Path $lockFile) {
+    try {
+        $lastNotification = [DateTime]::Parse((Get-Content $lockFile -ErrorAction SilentlyContinue))
+        if (((Get-Date) - $lastNotification).TotalSeconds -lt 15) { exit 0 }
+    } catch {}
 }
+(Get-Date).ToString("o") | Out-File $lockFile -NoNewline -Encoding ascii
 
 # Check BurntToast is available
 if (-not (Get-Module -ListAvailable -Name BurntToast)) { exit 0 }
