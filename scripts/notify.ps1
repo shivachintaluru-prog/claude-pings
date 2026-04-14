@@ -2,7 +2,8 @@
 # Called by Claude Code's Notification and Stop hooks.
 
 $scriptDir = Split-Path -Parent $MyInvocation.MyCommand.Definition
-$dataDir = Join-Path (Split-Path -Parent $scriptDir) "data"
+$rootDir = Split-Path -Parent $scriptDir
+$dataDir = Join-Path $rootDir "data"
 
 # Read hook JSON from stdin to determine event type
 $eventName = "notification"
@@ -22,7 +23,6 @@ try {
 "[$(Get-Date -Format 'yyyy-MM-dd HH:mm:ss.fff')] EVENT=$eventName" | Out-File -Append (Join-Path $env:TEMP "claude-notification-debug.log")
 
 # Debounce Stop events — suppress if one was sent less than 5 seconds ago.
-# This filters out intermediate tool-use stops while catching the final "done" stop.
 if ($eventName -eq "stop") {
     $lockFile = Join-Path $env:TEMP "claude-notification-stop.lock"
     if (Test-Path $lockFile) {
@@ -58,21 +58,15 @@ $tipsFile = Join-Path $dataDir "tips.json"
 $metaFile = Join-Path $dataDir "tips-meta.json"
 if ((Get-Random -Minimum 1 -Maximum 6) -eq 1 -and (Test-Path $tipsFile)) {
     try {
-        $tips = Get-Content $tipsFile -Raw | ConvertFrom-Json
-        $meta = if (Test-Path $metaFile) { Get-Content $metaFile -Raw | ConvertFrom-Json } else { @{ seenIndices = @() } }
+        $tips = Get-Content $tipsFile -Raw -Encoding UTF8 | ConvertFrom-Json
+        $meta = if (Test-Path $metaFile) { Get-Content $metaFile -Raw -Encoding UTF8 | ConvertFrom-Json } else { @{ seenIndices = @() } }
         $seen = @($meta.seenIndices)
-
-        # Reset if all tips have been seen
         if ($seen.Count -ge $tips.Count) { $seen = @() }
-
-        # Pick a random unseen tip
         $unseen = @(0..($tips.Count - 1) | Where-Object { $_ -notin $seen })
         if ($unseen.Count -gt 0) {
             $idx = $unseen | Get-Random
             $tipLine = $tips[$idx]
             $seen += $idx
-
-            # Update meta
             $meta.seenIndices = $seen
             $meta | ConvertTo-Json | Out-File $metaFile -Encoding utf8
         }
@@ -82,42 +76,42 @@ if ((Get-Random -Minimum 1 -Maximum 6) -eq 1 -and (Test-Path $tipsFile)) {
 # Build notification body
 $body = $message
 if ($tipLine) {
-    $body = "$message`n`n$([char]0x1F4A1) $tipLine"
+    $body = "$message`n`nTip: $tipLine"
 }
 
-# Find Windows Terminal and update protocol handler for click-to-focus
+# Find Windows Terminal tab index using a single bulk WMI query (fast)
 $wtProc = Get-Process -Name WindowsTerminal -ErrorAction SilentlyContinue |
     Where-Object { $_.MainWindowHandle -ne [IntPtr]::Zero } |
     Select-Object -First 1
 
 if ($wtProc) {
-    $current = Get-Process -Id $PID -ErrorAction SilentlyContinue
-    $chain = @()
-    $visited = @{}
-    while ($current) {
-        if ($visited.ContainsKey($current.Id)) { break }
-        $visited[$current.Id] = $true
-        $chain += $current
-        try {
-            $parentId = (Get-CimInstance Win32_Process -Filter "ProcessId = $($current.Id)" -ErrorAction SilentlyContinue).ParentProcessId
-            if (-not $parentId -or $parentId -eq $current.Id) { break }
-            $current = Get-Process -Id $parentId -ErrorAction SilentlyContinue
-        } catch { break }
+    # Single WMI query to get ALL process parent relationships
+    $allProcs = @{}
+    Get-CimInstance Win32_Process -Property ProcessId, ParentProcessId, Name -ErrorAction SilentlyContinue | ForEach-Object {
+        $allProcs[$_.ProcessId] = $_
     }
 
+    # Walk up from $PID using in-memory map (instant)
     $tabRootPid = $null
-    for ($i = 0; $i -lt $chain.Count; $i++) {
-        if ($chain[$i].Id -eq $wtProc.Id -and $i -gt 0) {
-            $tabRootPid = $chain[$i - 1].Id
+    $currentPid = $PID
+    $visited = @{}
+    while ($currentPid -and -not $visited.ContainsKey($currentPid)) {
+        $visited[$currentPid] = $true
+        $proc = $allProcs[$currentPid]
+        if (-not $proc) { break }
+        if ($proc.ParentProcessId -eq $wtProc.Id) {
+            $tabRootPid = $currentPid
             break
         }
+        $currentPid = $proc.ParentProcessId
     }
 
+    # Determine tab index from WT's children
     $tabIndex = 0
     if ($tabRootPid) {
-        $wtChildren = Get-CimInstance Win32_Process -Filter "ParentProcessId = $($wtProc.Id)" -ErrorAction SilentlyContinue |
-            Where-Object { $_.Name -ne "OpenConsole.exe" } |
-            Sort-Object CreationDate
+        $wtChildren = $allProcs.Values | Where-Object {
+            $_.ParentProcessId -eq $wtProc.Id -and $_.Name -ne "OpenConsole.exe"
+        } | Sort-Object @{Expression={$_.ProcessId}}
         for ($i = 0; $i -lt $wtChildren.Count; $i++) {
             if ($wtChildren[$i].ProcessId -eq $tabRootPid) {
                 $tabIndex = $i
@@ -126,6 +120,7 @@ if ($wtProc) {
         }
     }
 
+    # Update protocol handler
     $commandKey = "HKCU:\Software\Classes\claude-focus\shell\open\command"
     $wtPath = (Get-Command wt.exe -ErrorAction SilentlyContinue).Source
     if ($wtPath) {
@@ -134,14 +129,34 @@ if ($wtProc) {
     }
 }
 
-# Send toast notification
+# Register custom AppId (removes PowerShell branding, shows "Claude Code")
+$appId = "Claude.Code.Pings"
+try {
+    New-BTAppId -AppId $appId -AppDisplayName "Claude Code" -ErrorAction SilentlyContinue
+} catch {}
+
+# Send toast notification with Claude icon
+$iconPath = Join-Path $rootDir "assets\claude-icon.ico"
 try {
     $text1 = New-BTText -Content "Claude Code"
     $text2 = New-BTText -Content $body
     $binding = New-BTBinding -Children $text1, $text2
     $visual = New-BTVisual -BindingGeneric $binding
-    $content = New-BTContent -Visual $visual -Launch "claude-focus://focus" -ActivationType Protocol
-    Submit-BTNotification -Content $content
+
+    $toastParams = @{
+        Visual = $visual
+        Launch = "claude-focus://focus"
+        ActivationType = "Protocol"
+    }
+    if (Test-Path $iconPath) {
+        $image = New-BTImage -Source $iconPath -AppLogoOverride
+        $binding = New-BTBinding -Children $text1, $text2 -AppLogoOverride $image
+        $visual = New-BTVisual -BindingGeneric $binding
+        $toastParams.Visual = $visual
+    }
+
+    $content = New-BTContent @toastParams
+    Submit-BTNotification -Content $content -AppId $appId
 } catch {}
 
 exit 0
