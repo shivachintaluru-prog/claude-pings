@@ -1,0 +1,11 @@
+# Runtime state (changes per-user)
+data/tips-meta.json
+
+# Debug logs
+*.log
+
+# Lock files
+*.lock
+
+# Design docs (not needed for users)
+docs/
