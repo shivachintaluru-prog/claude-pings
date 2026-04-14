@@ -5,8 +5,9 @@ $scriptDir = Split-Path -Parent $MyInvocation.MyCommand.Definition
 $rootDir = Split-Path -Parent $scriptDir
 $dataDir = Join-Path $rootDir "data"
 
-# Read hook JSON from stdin to determine event type
+# Read hook JSON from stdin to determine event type and session
 $eventName = "notification"
+$sessionId = "default"
 try {
     if ([Console]::IsInputRedirected) {
         $json = [Console]::In.ReadToEnd()
@@ -15,6 +16,9 @@ try {
             if ($hook.hook_event_name) {
                 $eventName = $hook.hook_event_name.ToLower()
             }
+            if ($hook.session_id) {
+                $sessionId = $hook.session_id
+            }
         }
     }
 } catch {}
@@ -22,9 +26,9 @@ try {
 # Log hook invocations (kept for diagnosing duplicate notifications)
 "[$(Get-Date -Format 'yyyy-MM-dd HH:mm:ss.fff')] EVENT=$eventName" | Out-File -Append (Join-Path $env:TEMP "claude-notification-debug.log")
 
-# Debounce ALL events — suppress if any notification was sent less than 15 seconds ago.
-# Prevents duplicates when both Stop and Notification fire for the same response.
-$lockFile = Join-Path $env:TEMP "claude-notification.lock"
+# Debounce per session — suppress if this session sent a notification less than 15 seconds ago.
+# Each tab/session gets its own lock so notifications from different tabs don't suppress each other.
+$lockFile = Join-Path $env:TEMP "claude-notification-$sessionId.lock"
 if (Test-Path $lockFile) {
     try {
         $lastNotification = [DateTime]::Parse((Get-Content $lockFile -ErrorAction SilentlyContinue))
