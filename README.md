@@ -1,46 +1,58 @@
-# Claude Code Notification Plugin
+# claude-pings
 
-Windows toast notifications when Claude Code needs your attention. Clicking the notification brings the terminal to the foreground.
+Windows toast notifications for Claude Code — with personality, humor, and feature discovery tips.
 
-## Prerequisites
+When Claude finishes working or needs your input, you get a toast notification. Clicking it brings the right terminal tab to the foreground.
 
-- Windows 10/11
-- PowerShell 5.1+ (ships with Windows)
-
-## Setup
-
-### 1. Install BurntToast
+## Install
 
 ```powershell
-Install-Module BurntToast -Scope CurrentUser -Force
+git clone https://github.com/shivachintaluru-prog/claude-pings.git
+cd claude-pings
+powershell.exe -ExecutionPolicy Bypass -File install.ps1
 ```
 
-### 2. Register the click-to-focus protocol
+That's it. Start a new Claude Code session and notifications will appear automatically.
 
-Run once from the plugin directory:
+## What You Get
+
+- Context-aware messages that tell you why Claude needs you (output ready vs. permission needed)
+- 150 rotating messages with original humor across 9 themes
+- Feature discovery tips on ~20% of notifications
+- Click-to-focus brings the correct terminal tab to the foreground
+
+## Optional: Auto-Update Tips
+
+Tips ship with 30 curated Claude Code feature tips. To auto-refresh from the changelog monthly:
+
+Edit `data/config.json` and set:
+```json
+{ "autoUpdateTips": true }
+```
+
+## Uninstall
+
+Remove the hooks from `~/.claude/settings.json` (delete the `Notification`, `Stop`, and `SessionStart` entries) and optionally remove the protocol:
 
 ```powershell
-powershell.exe -ExecutionPolicy Bypass -File register-protocol.ps1
+Remove-Item -Path "HKCU:\Software\Classes\claude-focus" -Recurse -Force
 ```
-
-### 3. Register the plugin in Claude Code
-
-Add this plugin to your Claude Code configuration.
-
-## How It Works
-
-When Claude Code finishes working and is waiting for your input, a Windows toast notification appears. Clicking it brings the Claude Code terminal window to the foreground.
 
 ## Troubleshooting
 
 **No notification appears:**
 - Verify BurntToast is installed: `Get-Module -ListAvailable -Name BurntToast`
 - Check Windows notification settings — ensure notifications are enabled for PowerShell
-- Run `notify.ps1` manually: `echo '{}' | powershell.exe -ExecutionPolicy Bypass -File scripts/notify.ps1`
+- Test manually: `echo '{}' | powershell.exe -ExecutionPolicy Bypass -File scripts/notify.ps1`
 
 **Clicking the notification does nothing:**
-- Verify the protocol is registered: `Get-ItemProperty "HKCU:\Software\Classes\claude-focus\shell\open\command"`
-- Re-run `register-protocol.ps1` if the plugin was moved to a different directory
+- Re-run `powershell.exe -ExecutionPolicy Bypass -File install.ps1` (re-registers the protocol)
 
-**Notifications are blocked by execution policy:**
-- The plugin uses `-ExecutionPolicy Bypass` for its scripts. If your organization enforces stricter policies, talk to your IT admin.
+**Too many notifications:**
+- The plugin debounces within 15 seconds per session. If you still see duplicates, check `~/.claude/settings.json` for duplicate hook entries.
+
+## Requirements
+
+- Windows 10/11
+- PowerShell 5.1+ (ships with Windows)
+- Claude Code
