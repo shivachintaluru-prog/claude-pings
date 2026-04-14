@@ -129,34 +129,21 @@ if ($wtProc) {
     }
 }
 
-# Register custom AppId (removes PowerShell branding, shows "Claude Code")
-$appId = "Claude.Code.Pings"
-try {
-    New-BTAppId -AppId $appId -AppDisplayName "Claude Code" -ErrorAction SilentlyContinue
-} catch {}
-
-# Send toast notification with Claude icon
+# Send toast notification with Claude icon and protocol activation
 $iconPath = Join-Path $rootDir "assets\claude-icon.ico"
 try {
     $text1 = New-BTText -Content "Claude Code"
     $text2 = New-BTText -Content $body
-    $binding = New-BTBinding -Children $text1, $text2
-    $visual = New-BTVisual -BindingGeneric $binding
-
-    $toastParams = @{
-        Visual = $visual
-        Launch = "claude-focus://focus"
-        ActivationType = "Protocol"
-    }
+    $toastParams = @{}
     if (Test-Path $iconPath) {
         $image = New-BTImage -Source $iconPath -AppLogoOverride
         $binding = New-BTBinding -Children $text1, $text2 -AppLogoOverride $image
-        $visual = New-BTVisual -BindingGeneric $binding
-        $toastParams.Visual = $visual
+    } else {
+        $binding = New-BTBinding -Children $text1, $text2
     }
-
-    $content = New-BTContent @toastParams
-    Submit-BTNotification -Content $content -AppId $appId
+    $visual = New-BTVisual -BindingGeneric $binding
+    $content = New-BTContent -Visual $visual -Launch "claude-focus://focus" -ActivationType Protocol
+    Submit-BTNotification -Content $content
 } catch {}
 
 exit 0
