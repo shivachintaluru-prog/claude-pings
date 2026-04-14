@@ -111,7 +111,7 @@ if ($wtProc) {
     if ($tabRootPid) {
         $wtChildren = $allProcs.Values | Where-Object {
             $_.ParentProcessId -eq $wtProc.Id -and $_.Name -ne "OpenConsole.exe"
-        } | Sort-Object @{Expression={$_.ProcessId}}
+        } | Sort-Object CreationDate
         for ($i = 0; $i -lt $wtChildren.Count; $i++) {
             if ($wtChildren[$i].ProcessId -eq $tabRootPid) {
                 $tabIndex = $i
