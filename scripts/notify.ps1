@@ -150,7 +150,9 @@ try {
     }
     $visual = New-BTVisual -BindingGeneric $binding
     $content = New-BTContent -Visual $visual -Launch "claude-focus://focus" -ActivationType Protocol
-    Submit-BTNotification -Content $content
+    # UniqueIdentifier per session — replaces previous notification instead of stacking.
+    # Prevents pile-up in notification center which causes Windows to throttle.
+    Submit-BTNotification -Content $content -UniqueIdentifier "claude-ping-$sessionId"
 } catch {}
 
 exit 0
