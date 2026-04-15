@@ -51,6 +51,14 @@ Remove-Item -Path "HKCU:\Software\Classes\claude-focus" -Recurse -Force
 **Too many notifications:**
 - The plugin debounces within 15 seconds per session. If you still see duplicates, check `~/.claude/settings.json` for duplicate hook entries.
 
+## Known Limitations
+
+**Tab switching is best-effort.** Clicking a notification brings Windows Terminal to the foreground, but switching to the exact tab that triggered it may not always work. This is due to two Windows Terminal limitations:
+- No public API exists to map process IDs to UI tab order — reordered or reopened tabs may get the wrong index
+- `wt.exe focus-tab` has an [open bug](https://github.com/microsoft/terminal/issues/19324) where it intermittently fails when WT is already in the foreground
+
+**Notifications are silent during screen recording/Focus Assist.** Windows suppresses toast popups when Do Not Disturb or Focus Assist is active. Notifications still appear in the notification center.
+
 ## Requirements
 
 - Windows 10/11
