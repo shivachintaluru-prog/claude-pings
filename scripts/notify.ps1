@@ -26,13 +26,14 @@ try {
 # Log hook invocations (kept for diagnosing duplicate notifications)
 "[$(Get-Date -Format 'yyyy-MM-dd HH:mm:ss.fff')] EVENT=$eventName" | Out-File -Append (Join-Path $env:TEMP "claude-notification-debug.log")
 
-# Debounce per session — suppress if this session sent a notification less than 15 seconds ago.
-# Each tab/session gets its own lock so notifications from different tabs don't suppress each other.
+# Debounce per session — suppress if this session sent a notification less than 60 seconds ago.
+# Both Stop and Notification fire for the same response (~60s apart). This catches both.
+# Each tab/session gets its own lock so different tabs don't suppress each other.
 $lockFile = Join-Path $env:TEMP "claude-notification-$sessionId.lock"
 if (Test-Path $lockFile) {
     try {
         $lastNotification = [DateTime]::Parse((Get-Content $lockFile -ErrorAction SilentlyContinue))
-        if (((Get-Date) - $lastNotification).TotalSeconds -lt 15) { exit 0 }
+        if (((Get-Date) - $lastNotification).TotalSeconds -lt 60) { exit 0 }
     } catch {}
 }
 (Get-Date).ToString("o") | Out-File $lockFile -NoNewline -Encoding ascii
